@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: job-tracker-frontend
+    env: static
+    staticPublishPath: build
+    routes:
+      - path: /*
+        type: rewrite
+        destination: /index.html
