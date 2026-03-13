@@ -3,12 +3,15 @@ import Navbar from '../components/Navbar';
 import toast from 'react-hot-toast';
 import {
   getProducts, createProduct, updateProduct,
-  deleteProduct, getCategories, searchProducts
+  deleteProduct, getCategories, searchProducts,
+  getSuppliers, getTags
 } from '../services/api';
 
 export default function Products() {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
+  const [tags, setTags] = useState([]);
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -18,12 +21,17 @@ export default function Products() {
   const itemsPerPage = 5;
   const [form, setForm] = useState({
     name: '', description: '', price: '',
-    quantity: '', lowStockThreshold: 5, category: { id: '' }
+    quantity: '', lowStockThreshold: 5,
+    category: { id: '' },
+    supplier: { id: '' },
+    tags: []
   });
 
   useEffect(() => {
     loadProducts();
     getCategories().then(res => setCategories(res.data));
+    getSuppliers().then(res => setSuppliers(res.data));
+    getTags().then(res => setTags(res.data));
   }, []);
 
   const loadProducts = async () => {
@@ -68,11 +76,13 @@ export default function Products() {
     setEditProduct(product);
     setForm({
       name: product.name,
-      description: product.description,
+      description: product.description || '',
       price: product.price,
       quantity: product.quantity,
       lowStockThreshold: product.lowStockThreshold,
-      category: { id: product.category?.id || '' }
+      category: { id: product.category?.id || '' },
+      supplier: { id: product.supplier?.id || '' },
+      tags: product.tags ? product.tags.map(t => ({ id: t.id })) : []
     });
     setShowForm(true);
   };
@@ -92,18 +102,23 @@ export default function Products() {
   const resetForm = () => {
     setForm({
       name: '', description: '', price: '',
-      quantity: '', lowStockThreshold: 5, category: { id: '' }
+      quantity: '', lowStockThreshold: 5,
+      category: { id: '' },
+      supplier: { id: '' },
+      tags: []
     });
     setEditProduct(null);
     setShowForm(false);
   };
 
-  // Export CSV
   const exportCSV = () => {
-    const headers = ['ID', 'Name', 'Description', 'Price', 'Quantity', 'Category'];
+    const headers = ['ID', 'Name', 'Description', 'Price', 'Quantity', 'Category', 'Supplier', 'Tags'];
     const rows = products.map(p => [
       p.id, p.name, p.description,
-      p.price, p.quantity, p.category?.name || ''
+      p.price, p.quantity,
+      p.category?.name || '',
+      p.supplier?.companyName || p.supplier?.name || '',
+      p.tags ? p.tags.map(t => t.name).join(' | ') : ''
     ]);
     const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -115,12 +130,10 @@ export default function Products() {
     toast.success('CSV exported!');
   };
 
-  // Filter by category
   const filteredProducts = selectedCategory
     ? products.filter(p => p.category?.id === parseInt(selectedCategory))
     : products;
 
-  // Pagination
   const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
   const paginatedProducts = filteredProducts.slice(
     (currentPage - 1) * itemsPerPage,
@@ -136,13 +149,11 @@ export default function Products() {
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-2xl font-bold text-gray-800">Products</h1>
           <div className="flex gap-2">
-            <button
-              onClick={exportCSV}
+            <button onClick={exportCSV}
               className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm">
               📥 Export CSV
             </button>
-            <button
-              onClick={() => setShowForm(true)}
+            <button onClick={() => setShowForm(true)}
               className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm">
               + Add Product
             </button>
@@ -161,10 +172,7 @@ export default function Products() {
           />
           <select
             value={selectedCategory}
-            onChange={e => {
-              setSelectedCategory(e.target.value);
-              setCurrentPage(1);
-            }}
+            onChange={e => { setSelectedCategory(e.target.value); setCurrentPage(1); }}
             className="border border-gray-300 rounded-lg px-4 py-2
                        focus:outline-none focus:ring-2 focus:ring-blue-500">
             <option value="">All Categories</option>
@@ -178,58 +186,83 @@ export default function Products() {
         {showForm && (
           <div className="fixed inset-0 bg-black bg-opacity-40 flex
                           items-center justify-center z-50">
-            <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl">
+            <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-xl
+                            max-h-screen overflow-y-auto">
               <h2 className="text-xl font-bold mb-4">
                 {editProduct ? 'Edit Product' : 'Add Product'}
               </h2>
               <form onSubmit={handleSubmit} className="space-y-3">
-                <input
-                  placeholder="Product Name"
-                  value={form.name}
+                <input placeholder="Product Name *" value={form.name}
                   onChange={e => setForm({...form, name: e.target.value})}
-                  className="w-full border rounded-lg px-3 py-2"
-                  required
-                />
-                <input
-                  placeholder="Description"
-                  value={form.description}
+                  className="w-full border rounded-lg px-3 py-2" required />
+
+                <input placeholder="Description" value={form.description}
                   onChange={e => setForm({...form, description: e.target.value})}
-                  className="w-full border rounded-lg px-3 py-2"
-                />
-                <input
-                  type="number"
-                  placeholder="Price"
-                  value={form.price}
+                  className="w-full border rounded-lg px-3 py-2" />
+
+                <input type="number" placeholder="Price *" value={form.price}
                   onChange={e => setForm({...form, price: e.target.value})}
-                  className="w-full border rounded-lg px-3 py-2"
-                  required
-                />
-                <input
-                  type="number"
-                  placeholder="Quantity"
-                  value={form.quantity}
+                  className="w-full border rounded-lg px-3 py-2" required />
+
+                <input type="number" placeholder="Quantity *" value={form.quantity}
                   onChange={e => setForm({...form, quantity: e.target.value})}
-                  className="w-full border rounded-lg px-3 py-2"
-                  required
-                />
-                <input
-                  type="number"
-                  placeholder="Low Stock Threshold"
+                  className="w-full border rounded-lg px-3 py-2" required />
+
+                <input type="number" placeholder="Low Stock Threshold"
                   value={form.lowStockThreshold}
                   onChange={e => setForm({...form, lowStockThreshold: e.target.value})}
-                  className="w-full border rounded-lg px-3 py-2"
-                />
+                  className="w-full border rounded-lg px-3 py-2" />
+
+                {/* Category */}
                 <select
                   value={form.category.id}
                   onChange={e => setForm({...form, category: { id: e.target.value }})}
-                  className="w-full border rounded-lg px-3 py-2"
-                  required
-                >
-                  <option value="">Select Category</option>
+                  className="w-full border rounded-lg px-3 py-2" required>
+                  <option value="">Select Category *</option>
                   {categories.map(c => (
                     <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
                 </select>
+
+                {/* Supplier */}
+                <select
+                  value={form.supplier?.id || ''}
+                  onChange={e => setForm({...form, supplier: { id: e.target.value }})}
+                  className="w-full border rounded-lg px-3 py-2">
+                  <option value="">Select Supplier (optional)</option>
+                  {suppliers.map(s => (
+                    <option key={s.id} value={s.id}>
+                      {s.companyName || s.name}
+                    </option>
+                  ))}
+                </select>
+
+                {/* Tags */}
+                {tags.length > 0 && (
+                  <div className="border rounded-lg px-3 py-2">
+                    <p className="text-sm text-gray-500 mb-2">Tags (optional):</p>
+                    <div className="flex flex-wrap gap-2">
+                      {tags.map(tag => (
+                        <label key={tag.id}
+                          className="flex items-center gap-1 text-sm cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={form.tags.some(t => t.id === tag.id)}
+                            onChange={e => {
+                              if (e.target.checked) {
+                                setForm({...form, tags: [...form.tags, { id: tag.id }]});
+                              } else {
+                                setForm({...form, tags: form.tags.filter(t => t.id !== tag.id)});
+                              }
+                            }}
+                          />
+                          {tag.name}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex gap-2 pt-2">
                   <button type="submit"
                     className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700">
@@ -249,8 +282,7 @@ export default function Products() {
         {loading ? (
           <div className="flex justify-center items-center py-20">
             <div className="animate-spin rounded-full h-12 w-12
-                            border-4 border-blue-600 border-t-transparent">
-            </div>
+                            border-4 border-blue-600 border-t-transparent"></div>
           </div>
         ) : (
           <>
@@ -261,8 +293,10 @@ export default function Products() {
                   <tr>
                     <th className="text-left p-3">Name</th>
                     <th className="text-left p-3">Category</th>
+                    <th className="text-left p-3">Supplier</th>
                     <th className="text-left p-3">Price</th>
-                    <th className="text-left p-3">Quantity</th>
+                    <th className="text-left p-3">Qty</th>
+                    <th className="text-left p-3">Tags</th>
                     <th className="text-left p-3">Status</th>
                     <th className="text-left p-3">Actions</th>
                   </tr>
@@ -272,36 +306,40 @@ export default function Products() {
                     <tr key={p.id} className="border-t hover:bg-gray-50">
                       <td className="p-3 font-medium">{p.name}</td>
                       <td className="p-3">{p.category?.name || '-'}</td>
+                      <td className="p-3">{p.supplier?.companyName || p.supplier?.name || '-'}</td>
                       <td className="p-3">₹{p.price?.toLocaleString()}</td>
                       <td className="p-3">{p.quantity}</td>
                       <td className="p-3">
+                        <div className="flex flex-wrap gap-1">
+                          {p.tags && p.tags.map(t => (
+                            <span key={t.id}
+                              className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full">
+                              {t.name}
+                            </span>
+                          ))}
+                          {(!p.tags || p.tags.length === 0) && '-'}
+                        </div>
+                      </td>
+                      <td className="p-3">
                         {p.quantity <= p.lowStockThreshold ? (
                           <span className="bg-red-100 text-red-600 px-2 py-1
-                                           rounded text-xs font-medium">
-                            ⚠️ Low Stock
-                          </span>
+                                           rounded text-xs font-medium">⚠️ Low</span>
                         ) : (
                           <span className="bg-green-100 text-green-600 px-2 py-1
-                                           rounded text-xs font-medium">
-                            ✅ In Stock
-                          </span>
+                                           rounded text-xs font-medium">✅ OK</span>
                         )}
                       </td>
                       <td className="p-3">
                         <button onClick={() => handleEdit(p)}
-                          className="text-blue-600 hover:underline mr-3 text-xs">
-                          Edit
-                        </button>
+                          className="text-blue-600 hover:underline mr-3 text-xs">Edit</button>
                         <button onClick={() => handleDelete(p.id)}
-                          className="text-red-600 hover:underline text-xs">
-                          Delete
-                        </button>
+                          className="text-red-600 hover:underline text-xs">Delete</button>
                       </td>
                     </tr>
                   ))}
                   {paginatedProducts.length === 0 && (
                     <tr>
-                      <td colSpan="6" className="text-center p-6 text-gray-400">
+                      <td colSpan="8" className="text-center p-6 text-gray-400">
                         No products found
                       </td>
                     </tr>
@@ -321,9 +359,7 @@ export default function Products() {
                   ← Prev
                 </button>
                 {[...Array(totalPages)].map((_, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setCurrentPage(i + 1)}
+                  <button key={i} onClick={() => setCurrentPage(i + 1)}
                     className={`px-3 py-1 rounded text-sm border
                       ${currentPage === i + 1
                         ? 'bg-blue-600 text-white'
