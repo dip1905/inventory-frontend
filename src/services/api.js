@@ -1,9 +1,10 @@
 import axios from 'axios';
 
 const BASE_URL = 'http://localhost:8080/api';
+const API_BASE_URL = 'https://inventory-backend-attf.onrender.com/api';
 
 const api = axios.create({
-    baseURL: BASE_URL,
+    baseURL: API_BASE_URL,
 });
 
 // Auto attach token to every request
